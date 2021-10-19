@@ -1,9 +1,21 @@
-from torch.utils.data import Dataset, dataset
+from torch.utils.data import Dataset
 import os 
 import torch
-import json,xmltodict
+import xmltodict
 from PIL import Image
-from lxml import etree
+
+"""
+Understand VOC
+
+VOC 2007数据集中图片的bounding box的四个坐标分别为左上角和右下角的x，y坐标
+(xmin,ymin,xmax,ymax),且图片是1-base的,即图片左上角的点的坐标为(1,1)
+---------> x axis
+|
+|
+|
+v
+y axis
+"""
 
 
 pascal_voc_classes_dict = {
@@ -66,19 +78,26 @@ class VOCDetectionDataset(Dataset):
         with open(xml_path,'r') as fd:
             xml_str=fd.read()
         xml_dict=xmltodict.parse(xml_str)['annotation']
-
         # read image 
         img_path=os.path.join(self.img_root,xml_dict['filename'])
-        image=Image.open(img_path)
-        if image.format != "JPEG":
-            raise ValueError("Image format not JPEG")
+        image=Image.open(img_path).convert('RGB')
 
         # read each object information in a picture
         boxes=[] # object box
         labels=[] # label
         iscrowd=[] # difficulty
-        
-        for obj in xml_dict['object']:
+        # fixes a bug need to consider diffierent types of xml_dict['object']
+        if isinstance(xml_dict['object'],list):
+            for obj in xml_dict['object']:
+                xmin=float(obj['bndbox']['xmin'])
+                xmax=float(obj['bndbox']['xmax'])
+                ymin=float(obj['bndbox']['ymin'])
+                ymax=float(obj['bndbox']['ymax'])
+                boxes.append([xmin,ymin,xmax,ymax])
+                labels.append(self.class_dict[obj['name']])
+                iscrowd.append(int(obj['difficult']))
+        else:
+            obj=xml_dict['object']
             xmin=float(obj['bndbox']['xmin'])
             xmax=float(obj['bndbox']['xmax'])
             ymin=float(obj['bndbox']['ymin'])
@@ -101,7 +120,7 @@ class VOCDetectionDataset(Dataset):
         target["area"] = area
         target["iscrowd"] = iscrowd  
 
-        # if preprocessing
+        # preprocessing the image
         if self.transforms is not None:
             image,target=self.transforms(image,target)
         
@@ -109,8 +128,10 @@ class VOCDetectionDataset(Dataset):
 
 if __name__=="__main__":
     PATH="/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007"
-    test=VOCDetectionDataset(PATH,image_set='test')
+    test=VOCDetectionDataset(PATH,image_set='train')
     print(test[0])
+    print(test[6])
+    print(test[100])
     
 
 
