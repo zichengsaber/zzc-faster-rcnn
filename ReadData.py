@@ -1,4 +1,4 @@
-from utils.Vocdata import VOCDetectionDataset
+from data.Vocdata import VOCDetectionDataset
 
 if __name__=="__main__":
     PATH="/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007"

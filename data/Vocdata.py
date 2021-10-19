@@ -4,7 +4,7 @@ import torch
 import xmltodict
 from PIL import Image
 
-from utils.DataUtils import Transform
+from data.DataUtils import Transform
 
 """
 Understand VOC
