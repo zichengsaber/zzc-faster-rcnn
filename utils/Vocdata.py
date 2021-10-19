@@ -4,6 +4,8 @@ import torch
 import xmltodict
 from PIL import Image
 
+from utils.DataUtils import Transform
+
 """
 Understand VOC
 
@@ -15,6 +17,11 @@ VOC 2007数据集中图片的bounding box的四个坐标分别为左上角和右
 |
 v
 y axis
+
+_train.txt 训练样本集
+_val.txt 验证样本集
+_trainval.txt 训练和验证样本集汇总
+_test.txt 测试样本集合
 """
 
 
@@ -49,7 +56,7 @@ class VOCDetectionDataset(Dataset):
     __len__: Provides the size of the dataset
     __getitem__: Gets the data sample of the given key value
     """
-    def __init__(self,voc_root,transforms=None,image_set="train") -> None:
+    def __init__(self,voc_root,image_set="train") -> None:
         super().__init__()
         '''
         Parameters:
@@ -60,14 +67,15 @@ class VOCDetectionDataset(Dataset):
         self.root=voc_root # root_path
         self.img_root=os.path.join(self.root,"JPEGImages") # img_path
         self.annotations_root=os.path.join(self.root,"Annotations") # xml_path
-        txt_list=os.path.join(self.root,"ImageSets","Main",f"{image_set}.txt")
+        txt_list=os.path.join(self.root,"ImageSets","Main",f"{image_set}.txt") # Main下存放的是图像物体识别的数据，总共分为20类
         self.xml_list=None
         with open(txt_list,'r',encoding='utf8') as file:
             self.xml_list=[item.strip() for item in file.readlines()]
         # category
         self.class_dict=pascal_voc_classes_dict
         # image transforms
-        self.transforms=transforms
+        self.transforms=Transform()
+        self.imge_set=image_set
     
     def __len__(self):
         return len(self.xml_list)
@@ -110,28 +118,21 @@ class VOCDetectionDataset(Dataset):
         labels=torch.as_tensor(labels,dtype=torch.int64)
         iscrowd=torch.as_tensor(iscrowd,dtype=torch.int64)
         image_id = torch.tensor([index])
-        area=(boxes[:,3]-boxes[:,1])*(boxes[:,2]-boxes[:,0])
 
         # build target dictionary
         target={}
-        target["boxes"] = boxes
+        target["bbox"] = boxes
         target["labels"] = labels
         target["image_id"] = image_id
-        target["area"] = area
         target["iscrowd"] = iscrowd  
 
         # preprocessing the image
         if self.transforms is not None:
-            image,target=self.transforms(image,target)
+            image,target=self.transforms(image,target,self.imge_set)
         
         return image,target
 
-if __name__=="__main__":
-    PATH="/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007"
-    test=VOCDetectionDataset(PATH,image_set='train')
-    print(test[0])
-    print(test[6])
-    print(test[100])
+
     
 
 

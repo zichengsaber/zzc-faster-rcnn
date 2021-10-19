@@ -2,6 +2,7 @@ from torchvision import transforms
 import numpy as np
 from PIL import Image
 
+
 """
 The preprocessing pipeline
 1.torchvision.transforms.ToTensor
@@ -40,7 +41,7 @@ def bboxResize(bbox,in_size,out_size):
     in_size: (H,W) ,H->y,W->x
     out_size: (H,W)
     """
-    bbox=bbox.copy()
+    bbox=bbox.clone()
     in_H,in_W=in_size
     out_H,out_W=out_size
 
@@ -56,16 +57,23 @@ def bboxResize(bbox,in_size,out_size):
 
 
 class Transform:
-    def __init__(self,min_size,max_size) -> None:
+    def __init__(self,min_size=600,max_size=1000) -> None:
         self.min_size=min_size
         self.max_size=max_size
-    def __call__(self,image,target):
+    def __call__(self,img,target,image_set='train'):
+        # For training set transform
+        bbox=target['bbox']
+        H,W,_=np.array(img).shape
+        img=imgPreprocessing(img,self.min_size,self.max_size)
+        _,o_H,o_W=img.size()
+        scale=o_H/H
+        # training process we need resize our box
+        if image_set=='train':
+            bbox=bboxResize(bbox,(H,W),(o_H,o_W))
+            target['bbox']=bbox
+        target['scale']=scale
         
 
+        return img,target
 
-if __name__=="__main__":
-    # test part
-    PATH="/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007/JPEGImages/000004.jpg"
-    img=Image.open(PATH)
-    img_tensor=imgPreprocessing(img)
-    print(img_tensor.size())
+
