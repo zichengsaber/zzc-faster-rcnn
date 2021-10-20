@@ -1,15 +1,11 @@
 from data.Vocdata import VOCDetectionDataset
-from model.utils.bboxTools import loc2bbox,bbox2loc
+from model.utils.bboxTools import bboxIou,generate_anchor_base
 import torch
 if __name__=="__main__":
-    PATH="/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007"
-    test=VOCDetectionDataset(PATH,image_set='train')
-    print(test[0])
-    print(test[6])
-    print(test[200])
-    bbox=torch.randn(30,4)*100
-    loc=torch.randn(30,4)
-    print(bbox2loc(bbox,loc).size())
+    bbox_a=torch.randn(100,4)
+    bbox_b=torch.randn(10,4)
+    print(bboxIou(bbox_a,bbox_b).size())
+    print(generate_anchor_base())
 
 
     

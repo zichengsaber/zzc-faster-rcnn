@@ -1,5 +1,5 @@
 import torch
-
+import numpy as np
 
 def loc2bbox(src_bbox,loc):
     """
@@ -66,4 +66,62 @@ def bbox2loc(src_bbox,dst_bbox):
 
     return loc
 
+def bboxIou(bbox_a,bbox_b):
+    """
+    Calculate the Intersection of Unions (IoUs)
+    IoU is calculated as a ratio of area of the intersection 
+    and area of the union
+
+    Inputs:
+        bbox_a (tensor) [N,4] [[xmin,ymin,xmax,ymax],...[]]
+        bbox_b (tensor) [K,4] [[xmin,ymin,xmax,ymax],...[]]
+    Returns:
+        [N,K]
+    """
+    area_a=(bbox_a[:,2]-bbox_a[:,0])*(bbox_a[:,3]-bbox_a[:,1]) # [N,]
+    area_b=(bbox_b[:,2]-bbox_b[:,0])*(bbox_b[:,3]-bbox_b[:,1]) # [N,]
+    
+    # calc intersections
+    topLeft=torch.maximum(bbox_a[:,None,:2],bbox_b[:,:2]) #[N,K,2]
+    bottomRight=torch.minimum(bbox_a[:,None,2:],bbox_b[:,2:]) #[N,K,2]
+
+    area_i=torch.clamp(torch.prod(bottomRight-topLeft,dim=2),min=0.0) # 处理不相交的情况
+    return area_i / (area_a[:,None]+area_b-area_i)
+    
+
+def generate_anchor_base(base_size=16,ratios=[0.5,1,2],anchor_scales=[8,16,32]):
+    """
+    Generate anchor base windows by enumerating aspect ratios and scales
+    Inputs:
+        base_size (number): The width and the height of the reference window.
+        ratios (list of floats): This is ratios of width to height of
+            the anchors.
+        anchor_scales (list of numbers): This is areas of anchors.
+            Those areas will be the product of the square of an element in
+            :obj:`anchor_scales` and the original area of the reference
+            window.
+    Outputs:
+        tensor:
+        An array of shape :math:`(R, 4)`.
+        Each element is a set of coordinates of a bounding box.
+        The second axis corresponds to
+        :math:`(x_{min}, y_{min}, x_{max}, y_{max})` of a bounding box.
+    """
+    py=base_size/2.
+    px=base_size/2.
+
+    anchor_base=torch.zeros((len(ratios)*len(anchor_scales),4),
+                            dtype=torch.float32)
+    for i in range(len(ratios)):
+        for j in range(len(anchor_scales)):
+            h=base_size*anchor_scales[j]*np.sqrt(ratios[i])
+            w=base_size*anchor_scales[j]*np.sqrt(1./ratios[i])
+
+            index=i*len(anchor_scales)+j
+            anchor_base[index,0]=px-w/2.
+            anchor_base[index,1]=py-h/2.
+            anchor_base[index,2]=px+w/2.
+            anchor_base[index,3]=py+h/2.
+    return anchor_base
+    
     
