@@ -1,11 +1,17 @@
 from data.Vocdata import VOCDetectionDataset
-from model.utils.bboxTools import bboxIou,generate_anchor_base
+from model.utils.creatorTool import ProposalTargetCreator
 import torch
 if __name__=="__main__":
-    bbox_a=torch.randn(100,4)
-    bbox_b=torch.randn(10,4)
-    print(bboxIou(bbox_a,bbox_b).size())
-    print(generate_anchor_base())
+   # we need better test data
+   topleft=torch.rand((2000,2))*150
+   btright=topleft+torch.rand((2000,2))*100
+   roi=torch.cat((topleft,btright),dim=1)
+   topleft=torch.rand((10,2))*150
+   btright=topleft+torch.rand((10,2))*100
+   bbox=torch.cat((topleft,btright),dim=1)
+   label=torch.randint(20,(10,))
+   f=ProposalTargetCreator()
+   print(f(roi,bbox,label))
 
 
     
