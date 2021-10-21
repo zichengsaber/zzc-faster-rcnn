@@ -1,3 +1,4 @@
+from numpy.core.numeric import indices
 import torch
 import numpy as np
 from torchvision.ops import nms
@@ -124,9 +125,126 @@ class ProposalTargetCreator(object):
         
         return sample_roi,gt_roi_loc,gt_roi_label
 
+def _get_inside_index(anchor,H,W):
+    # Calc indicies of anchors which are located completely
+    # inside of the image
+    index_inside=torch.where(
+        (anchor[:,0]>=0) &
+        (anchor[:,1]>=0) &
+        (anchor[:,2]<=W) &
+        (anchor[:,3]<=H) 
+    )[0]
+
+    return index_inside
+
 class AnchorTargetCreator(object):
     """Assign the ground truth bounding boxes to anchors.
         
     Assigns the ground truth bounding boxes to anchors for training Region
     Proposal Networks introduced in Faster R-CNN 
+
+    Offsets and scales to match anchors to the ground truth
+
+    Args:
+        n_sample (int): The number of regions to produce
+        pos_iou_thresh(float): Anchors with IOU above this 
+            threshold will be assigned as postive.
+        neg_iou_thresh(float): Anchors with IoU below this
+            threshold will be assigned as negative.
+        pos_ratio (float): Ratio of positive regions in the
+            sampled regions.
+
     """
+
+    def __init__(self,
+                 n_sample=256,
+                 pos_iou_thresh=0.7,
+                 neg_iou_thresh=0.3,
+                 pos_ratio=0.5):
+        self.n_sample=n_sample
+        self.pos_iou_thresh=pos_iou_thresh
+        self.neg_iou_thresh=neg_iou_thresh
+        self.pos_ratio=pos_ratio
+    
+    def __call__(self,bbox,anchor,img_size):
+        """Assign ground truth supervision to sampled subset of anchors
+
+        Types of input arrays and output arrays  are same
+
+        Here are notations.
+
+        * :math:`S` is the number of anchors.
+        * :math:`R` is the number of bounding boxes.
+
+        Args:
+            bbox (array): Coordinates of bounding boxes. Its shape is
+                :math `(R,4)`
+            anchor (array): Coordinates of anchors. Its shape is 
+                :math `(S,4)`
+            img_size (tuple of int): A tuple : obj:`H,W`,which is 
+                a tuple of height and width of an image
+        Rerurns:
+            (tensor,tensor)
+        """
+        img_H,img_w=img_size
+
+        n_anchor=len(anchor)
+        inside_index=_get_inside_index(anchor,img_H,img_w)
+        anchor=anchor[inside_index]
+        argmax_ious, label = self._create_label(
+            inside_index, anchor, bbox)
+
+        # compute bounding box regression targets
+        loc=bbox2loc(anchor,bbox[argmax_ious])
+
+        # map up to original set of anchors
+        
+    def _create_label(self,inside_index,anchor,bbox):
+        # label: 1 is positive,0 is negative,-1 is don't care
+        label=torch.empty((len(inside_index),),dtype=torch.int64)
+        label.fill_(-1)
+
+        argmax_ious, max_ious, gt_argmax_ious = \
+            self._calc_ious(anchor, bbox, inside_index)
+
+        # assign negative labels  first
+        label[max_ious<self.neg_iou_thresh]=0
+        # positive label: for each gt ,anchor which highest iou
+        label[gt_argmax_ious]=1
+        # positive label : above threshold IOU
+        label[max_ious>=self.pos_iou_thresh]=1
+
+        # subsample positive labels if we have too many
+        n_pos=int(self.pos_ratio*self.n_sample)
+        pos_index=torch.where(label==1)[0]
+
+        if len(pos_index)>n_pos:
+            indices=torch.randperm(len(pos_index))[:len(pos_index)-n_pos]
+            dis_indices=pos_index[indices]
+            label[dis_indices]=-1
+        
+        # subsample negative labels if we have too many
+        n_neg=self.n_sample-torch.sum(label==1).item()
+        neg_index=torch.where(label==0)[0]
+
+        if len(neg_index)>n_neg:
+            indices=torch.randperm(len(neg_index))[:len(neg_index)-n_neg]
+            dis_indices=neg_index[indices]
+            label[dis_indices]=-1
+        
+        return argmax_ious,label
+
+
+    
+    def _calc_ious(self,anchor,bbox,inside_index):
+        # ious between the anchors and the gt boxes
+        ious=bboxIou(anchor,bbox) #[N,R]
+        argmax_ious=ious.argmax(dim=1) #[N,] 对应的bbox的index
+        max_ious=ious.max(dim=1)[0] #[N,]
+        gt_argmax_ious=ious.argmax(dim=0) #[R,]
+        gt_max_ious=ious.max(dim=0)[0] #[R,]
+
+        return argmax_ious,max_ious,gt_argmax_ious
+
+
+
