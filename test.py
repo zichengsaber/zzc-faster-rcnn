@@ -1,5 +1,5 @@
 from data.Vocdata import VOCDetectionDataset
-from model.utils.creatorTool import ProposalTargetCreator
+from model.utils.creatorTool import ProposalCreator, ProposalTargetCreator,AnchorTargetCreator
 import torch
 if __name__=="__main__":
    # we need better test data
@@ -12,6 +12,13 @@ if __name__=="__main__":
    label=torch.randint(20,(10,))
    f=ProposalTargetCreator()
    print(f(roi,bbox,label))
+   # Test AnchorTargetCreator
+   g=AnchorTargetCreator()
+   print(g(bbox,roi,(224,224)))
+   # Test ProposalCreator
+   
+
+
 
 
     
