@@ -1,21 +1,12 @@
 from data.Vocdata import VOCDetectionDataset
 from model.utils.creatorTool import ProposalCreator, ProposalTargetCreator,AnchorTargetCreator
+from model.RPN import RegionProposalNetwork
 import torch
 if __name__=="__main__":
-   # we need better test data
-   topleft=torch.rand((2000,2))*150
-   btright=topleft+torch.rand((2000,2))*100
-   roi=torch.cat((topleft,btright),dim=1)
-   topleft=torch.rand((10,2))*150
-   btright=topleft+torch.rand((10,2))*100
-   bbox=torch.cat((topleft,btright),dim=1)
-   label=torch.randint(20,(10,))
-   f=ProposalTargetCreator()
-   print(f(roi,bbox,label))
-   # Test AnchorTargetCreator
-   g=AnchorTargetCreator()
-   print(g(bbox,roi,(224,224)))
-   # Test ProposalCreator
+   x=torch.randn((4,512,32,32))
+   net=RegionProposalNetwork()
+   print(net(x,(600,800)))
+
    
 
 
