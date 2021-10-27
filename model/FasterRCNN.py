@@ -1,5 +1,6 @@
 import torch
-import numpy as np 
+import numpy as np
+from torch.autograd.grad_mode import no_grad 
 from model.utils.bboxTools import loc2bbox
 from torchvision.ops import nms 
 
@@ -7,6 +8,7 @@ from torch import nn
 from data.DataUtils import imgPreprocessing
 from torch.nn import functional as F 
 from utils.config import opt
+import utils.array_tool as at
 
 """装饰器和闭包
 把被装饰的函数替换成新函数
@@ -153,4 +155,115 @@ class FasterRCNN(nn.Module):
     
 
     def _suppress(self,raw_cls_bbox,raw_prob):
-        pass
+        bbox=list()
+        label=list()
+        score=list()
+        # skip cls_id = 0 because it is the background class
+        for l in range(1,self.n_class):
+            cls_bbox_l=raw_cls_bbox.view((-1,self.n_class,4))[:,l,:]
+            prob_l=raw_prob[:,l]
+            # choose top K
+            mask=prob_l > self.score_thresh
+            cls_bbox_l=cls_bbox_l[mask]
+            prob_l=prob_l[mask]
+            # non max suppresion
+            keep=nms(cls_bbox_l,prob_l,self.nms_thresh)
+
+            bbox.append(cls_bbox_l[keep].cpu())
+            label.append((l-1)*torch.ones((len(keep),),dtype=torch.int64))
+            score.append(prob_l[keep].cpu())
+        bbox=torch.cat(bbox,dim=0)
+        label=torch.cat(label,dim=0)
+        score=torch.cat(score,dim=0)
+
+        return bbox,label,score
+
+    @nograd
+    def predict(self,imgs,sizes=None):
+        """Detect objects from images.
+
+        This method predicts objects for each image.
+        
+        Args:
+            For evaluate 
+            input images is [C,H,W] tensor
+        Returns:
+            tuple of lists:
+            (bboxes,labels,scores)
+
+            * **bboxes**: A list of float arrays of shape :math:`(R, 4)`, \
+               where :math:`R` is the number of bounding boxes in a image. \
+               Each bouding box is organized by \
+               :math:`(x_{min}, y_{min}, x_{max}, y_{max})` \
+               in the second axis.
+            * **labels** : A list of integer arrays of shape :math:`(R,)`. \
+               Each value indicates the class of the bounding box. \
+               Values are in range :math:`[0, L - 1]`, where :math:`L` is the \
+               number of the foreground classes.
+            * **scores** : A list of float arrays of shape :math:`(R,)`. \
+               Each value indicates how confident the prediction is.
+        """
+        self.eval()
+        bboxes=list()
+        labels=list()
+        scores=list()
+
+        for img,size in zip(imgs,sizes):
+            img=at.totensor(img[None]).float()
+            scale=img.size(3)/size[1]
+            roi_cls_loc,roi_scores,rois,_ =self(img,scale=scale)
+            # we are assuming that batch size is 1
+            roi_score=roi_scores.data
+            roi_cls_loc = roi_cls_loc.data
+            roi = at.totensor(rois) / scale
+
+            # Covert predictions to bounding boxes in image coordinates.
+            # Bounding boxes are scaled to the scale of the input images.
+            mean = torch.tensor(self.loc_normalize_mean).cuda().repeat(self.n_class)[None]
+            std=torch.tensor(self.loc_normalize_std).cuda().repeat(self.n_class)[None]
+
+            roi_cls_loc=(roi_cls_loc*std+mean)
+            roi_cls_loc=roi_cls_loc.view(-1,self.n_class,4) #[R',L+1,4]
+            roi=roi.view(-1,1,4).expand_as(roi_cls_loc)
+            cls_bbox=loc2bbox(roi.cpu().view(-1,4),
+                              roi_cls_loc.cpu().view(-1,4))
+            cls_bbox=at.totensor(cls_bbox)
+            # [xmin,ymin,xmax,ymax]
+            # [H,W] size
+            cls_bbox[:,0::2]=(cls_bbox[:,0::2]).clamp(min=0,max=size[1])
+            cls_bbox[:,1::2]=(cls_bbox[:,1::2]).clamp(min=0,max=size[0])
+
+            prob=F.softmax(at.totensor(roi_score),dim=1)
+
+            bbox,label,score=self._suppress(cls_bbox,prob)
+            bboxes.append(bbox)
+            labels.append(label)
+            scores.append(score)
+        
+        self.use_preset('evaluate')
+        self.train()
+        return bboxes,labels,scores
+
+    def get_optimizer(self):
+        """
+        return optimizer, It could be overwriten if you want to specify 
+        special optimizer
+        """
+        lr = opt.lr
+        params = []
+        for key, value in dict(self.named_parameters()).items():
+            if value.requires_grad:
+                if 'bias' in key:
+                    params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
+                else:
+                    params += [{'params': [value], 'lr': lr, 'weight_decay': opt.weight_decay}]
+        if opt.use_adam:
+            self.optimizer = torch.optim.Adam(params)
+        else:
+            self.optimizer = torch.optim.SGD(params, momentum=0.9)
+        return self.optimizer
+    
+    def scale_lr(self,decay=0.1):
+        for param_group in self.optimizer.param_groups:
+            param_group['lr']*=decay
+        return self.optimizer
