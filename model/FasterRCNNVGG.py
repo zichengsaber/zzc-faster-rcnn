@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 from torchvision import models 
-from torchvision.models import vgg16_bn as vgg16
+from torchvision.models import vgg16
 from torchvision.ops import RoIPool
 
 from model.RPN import RegionProposalNetwork
@@ -98,7 +98,8 @@ class VGG16RoIHead(nn.Module):
     """
 
     def __init__(self,n_class,roi_size,spatial_scale,classifier):
-        super().__init__()()
+        
+        super().__init__()
         # n_class includes the background
 
         self.classifier=classifier

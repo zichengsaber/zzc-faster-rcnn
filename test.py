@@ -1,15 +1,19 @@
+import torch 
+from model.FasterRCNNVGG import FasterRCNNVGG16
 from data.Vocdata import VOCDetectionDataset
-from model.utils.creatorTool import ProposalCreator, ProposalTargetCreator,AnchorTargetCreator
-from model.RPN import RegionProposalNetwork
-import torch
-if __name__=="__main__":
-   x=torch.randn((4,512,32,32))
-   net=RegionProposalNetwork()
-   print(net(x,(600,800)))
 
-   
+dataset=VOCDetectionDataset("/home/ZhangZicheng/ObjectionDetection/VOCdevkit/VOC2007")
+img,_=dataset[0]
+
+model=FasterRCNNVGG16()
+model=model.cuda()
+
+roi_cls_locs,roi_scores,rois,roi_indices=model(img[None].cuda())
+print(roi_cls_locs.size())
+print(roi_scores.size())
+print(rois.size())
+print(roi_indices.size())
 
 
 
 
-    
