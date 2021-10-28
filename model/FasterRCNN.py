@@ -160,8 +160,8 @@ class FasterRCNN(nn.Module):
         score=list()
         # skip cls_id = 0 because it is the background class
         for l in range(1,self.n_class):
-            cls_bbox_l=raw_cls_bbox.view((-1,self.n_class,4))[:,l,:]
-            prob_l=raw_prob[:,l]
+            cls_bbox_l=raw_cls_bbox.view((-1,self.n_class,4))[:,l,:] # [R',4]
+            prob_l=raw_prob[:,l] #[R',]
             # choose top K
             mask=prob_l > self.score_thresh
             cls_bbox_l=cls_bbox_l[mask]
@@ -224,7 +224,7 @@ class FasterRCNN(nn.Module):
 
             roi_cls_loc=(roi_cls_loc*std+mean)
             roi_cls_loc=roi_cls_loc.view(-1,self.n_class,4) #[R',L+1,4]
-            roi=roi.view(-1,1,4).expand_as(roi_cls_loc)
+            roi=roi.view(-1,1,4).expand_as(roi_cls_loc) #[R',1,4]=> [R',L+1,4]
             cls_bbox=loc2bbox(roi.cpu().view(-1,4),
                               roi_cls_loc.cpu().view(-1,4))
             cls_bbox=at.totensor(cls_bbox)
@@ -233,7 +233,7 @@ class FasterRCNN(nn.Module):
             cls_bbox[:,0::2]=(cls_bbox[:,0::2]).clamp(min=0,max=size[1])
             cls_bbox[:,1::2]=(cls_bbox[:,1::2]).clamp(min=0,max=size[0])
 
-            prob=F.softmax(at.totensor(roi_score),dim=1)
+            prob=F.softmax(at.totensor(roi_score),dim=1) # [R',L+1]
 
             bbox,label,score=self._suppress(cls_bbox,prob)
             bboxes.append(bbox)
